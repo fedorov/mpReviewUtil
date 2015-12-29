@@ -1,4 +1,4 @@
-import shutil, string, os, sys, glob, xml.dom.minidom
+import shutil, string, os, sys, glob, xml.dom.minidom, dicom
 
 # Iterate over all series in the directory that follows PCampReview convention,
 # use rules defined in getCanonicalType() to 'tag' series according to the
@@ -7,6 +7,26 @@ import shutil, string, os, sys, glob, xml.dom.minidom
 # Input argument: directory with the data
 
 data = sys.argv[1]
+
+def getDWIbValue(studyDir,seriesStr):
+  print studyDir,seriesStr
+  dwiFiles = glob.glob(studyDir+'/'+str(int(seriesStr)/100)+'/DICOM/*dcm')
+  bVals = set()
+  for d in dwiFiles:
+    dcm = dicom.read_file(d)
+    try:
+      sl = dcm[0x0043,0x1039]
+    except:
+      print 'No clue what to do'
+    bValue = sl.value[0]
+    if bValue>100000:
+      bValue = bValue % 100000
+
+    bVals.add(bValue)
+  bVals = [i for i in bVals]
+  bVals.sort(reverse=True)
+  print bVals
+  return bVals
 
 def getElementValue(dom,name):
   elements = dom.getElementsByTagName('element')
@@ -23,7 +43,7 @@ def checkTagExistence(dom,tag):
       return True
 
   return False
- 
+
 def getValidDirs(dir):
   #dirs = [f for f in os.listdir(dir) if (not f.startswith('.')) and (not os.path.isfile(f))]
   dirs = os.listdir(dir)
@@ -36,7 +56,7 @@ def getCanonicalType(dom):
   desc = getElementValue(dom,'SeriesDescription')
   if re.search('[a-zA-Z]',desc) == None:
     return "SUB"
-  elif re.search('AX',desc) and re.search('T2',desc):
+  elif (re.search('AX ',desc) and re.search('T2 ',desc)) or (desc == 'AX FRFSE-XL T2'):
     return "T2AX"
   elif desc.startswith('Apparent Diffusion Coefficient'):
     # TODO: parse platform-specific b-values etc
@@ -73,7 +93,7 @@ for c in studies:
       pass
 
     xmlFileName = os.path.join(studyDir,s,'Reconstructions',s+'.xml')
-    
+
     try:
       dom = xml.dom.minidom.parse(xmlFileName)
     except:
@@ -89,11 +109,36 @@ for c in studies:
     except:
       seriesDescription2Count[desc]=1
 
-    seriesDescription2Type[desc] = seriesType
-    
+
     f = open(os.path.join(canonicalPath,s+'.json'),'w')
+
+    manufacturer = ''
+    model = ''
     import json
-    attrs = {'CanonicalType':seriesType}
+    if seriesType == "ADC": # try to figure out the b-values
+      print desc
+      dicomFiles = glob.glob(os.path.join(studyDir,s,'DICOM')+'/*dcm')
+      try:
+        dcm = dicom.read_file(dicomFiles[0])
+      except:
+        print 'Failed to read',studyDir+'/'+s+'/DICOM'
+      model = dcm.ManufacturerModelName
+      manufacturer = dcm.Manufacturer
+      try:
+        sl = dcm[0x0043,0x1039]
+        if sl.VR == 'UN':
+          bValue = sl.value.split('\\')[0]
+        else:
+          bValue = sl[0]
+      except:
+        sl = getDWIbValue(studyDir,s)
+        bValue = sl[0]
+      seriesType = seriesType+str(bValue)
+      #print seriesType
+
+    seriesDescription2Type[desc] = seriesType
+    attrs = {'CanonicalType':seriesType,'Manufacturer':manufacturer,
+        'ManufacturerModelName':model}
     f.write(json.dumps(attrs))
     f.close
 
@@ -103,4 +148,5 @@ for c in studies:
 #print seriesDescription2Count
 
 for k in seriesDescription2Type.keys():
-  print k,' ==> ',seriesDescription2Type[k]
+  if seriesDescription2Type[k].startswith('ADC'):
+    print k,' ==> ',seriesDescription2Type[k]

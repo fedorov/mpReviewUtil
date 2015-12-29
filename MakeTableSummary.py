@@ -35,7 +35,7 @@ def checkTagExistence(dom,tag):
       return True
 
   return False
- 
+
 def getValidDirs(dir):
   #dirs = [f for f in os.listdir(dir) if (not f.startswith('.')) and (not os.path.isfile(f))]
   dirs = os.listdir(dir)
@@ -60,12 +60,22 @@ def getCanonicalType(dom):
 
 def initHeader(settings):
   header = ['StudyID']
+  # if no structures specified in the config file, consider all
+  allStructures = None
+  try:
+    allStructures = settings['Structures']
+  except:
+    allStructures = ['WholeGland','PeripheralZone','TumorROI_PZ_1',
+      'TumorROI_CGTZ_1',
+      'BPHROI_1',
+      'NormalROI_PZ_1',
+      'NormalROI_CGTZ_1']
   for stype in settings['SeriesTypes']:
-    for structure in settings['Structures']:
+    for structure in allStructures:
       for mtype in settings['MeasurementTypes']:
         header.append(structure+'.'+stype+'.'+mtype)
   return header
-      
+
 
 seriesDescription2Count = {}
 seriesDescription2Type = {}
@@ -144,7 +154,7 @@ for c in studies:
       stypeFound = True
 
       canonicalType = seriesAttributes['CanonicalType']
-  
+
 
       # if no structures specified in the config file, consider all
       allStructures = None
@@ -161,7 +171,7 @@ for c in studies:
 
       for structure in allStructures:
         # check if segmentation is available for this series
-        
+
         for mtype in settings['MeasurementTypes']:
 
           measurementsDir = os.path.join(studyDir,s,'Measurements')

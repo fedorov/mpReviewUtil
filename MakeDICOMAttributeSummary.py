@@ -35,7 +35,7 @@ def checkTagExistence(dom,tag):
       return True
 
   return False
- 
+
 def getValidDirs(dir):
   #dirs = [f for f in os.listdir(dir) if (not f.startswith('.')) and (not os.path.isfile(f))]
   dirs = os.listdir(dir)
@@ -79,7 +79,6 @@ headerInitialized = False
 attributeValues = {}
 
 for c in studies:
-  print c
 
   try:
     if not c in settings['Studies']:
@@ -102,7 +101,7 @@ for c in studies:
 
   for stype in settings['SeriesTypes']:
     stypeFound = False
-    
+
     for s in series:
       if stypeFound:
         break
@@ -146,11 +145,16 @@ for c in studies:
           sys.exit()
 
         attr = getElementValue(dom, tag)
-        print "\t",attr
+        manuf = getElementValue(dom,"ManufacturerModelName")
+        try:
+          log = ';'.join([c,stype,s,tag,attr,manuf])
+        except:
+          log = ';'.join([c,stype,s,tag,"NA",manuf])
+        print log
         key = stype+'-'+tag
         try:
           attributeValues[key].add(attr)
         except:
           attributeValues[key] = Set([attr])
 
-print attributeValues
+#print attributeValues

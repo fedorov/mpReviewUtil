@@ -9,23 +9,27 @@ import shutil, string, os, sys, glob, xml.dom.minidom, dicom
 data = sys.argv[1]
 
 def getDWIbValue(studyDir,seriesStr):
-  print studyDir,seriesStr
-  dwiFiles = glob.glob(studyDir+'/'+str(int(seriesStr)/100)+'/DICOM/*dcm')
+  #print studyDir,seriesStr
+  if int(seriesStr)>100:
+    dwiFiles = glob.glob(studyDir+'/'+str(int(seriesStr)/100)+'/DICOM/*dcm')
+  else:
+    dwiFiles = glob.glob(studyDir+'/'+seriesStr+'/DICOM/*dcm')
   bVals = set()
   for d in dwiFiles:
     dcm = dicom.read_file(d)
     try:
       sl = dcm[0x0043,0x1039]
+      if sl.VR == 'UN':
+        bValue = sl.value.split('\\')[0]
+      else:
+        bValue = sl[0]
     except:
       print 'No clue what to do'
-    bValue = sl.value[0]
     if bValue>100000:
       bValue = bValue % 100000
-
     bVals.add(bValue)
   bVals = [i for i in bVals]
   bVals.sort(reverse=True)
-  print bVals
   return bVals
 
 def getElementValue(dom,name):
@@ -63,6 +67,8 @@ def getCanonicalType(dom):
     return 'ADC'
   elif re.search('Ax Dynamic',desc) or re.search('3D DCE',desc):
     return 'DCE'
+  elif re.search("DWI",desc):
+    return 'DWI'
   else:
     return "Unknown"
 
@@ -115,15 +121,26 @@ for c in studies:
     manufacturer = ''
     model = ''
     import json
-    if seriesType == "ADC": # try to figure out the b-values
+    attrs = {}
+      
+    dicomFiles = glob.glob(os.path.join(studyDir,s,'DICOM')+'/*dcm')
+    
+    try:
+      dcm = dicom.read_file(dicomFiles[0])
+    except:
+      print 'Failed to read',studyDir+'/'+s+'/DICOM'
+
+    model = dcm.ManufacturerModelName
+    manufacturer = dcm.Manufacturer
+
+    if seriesType == "DWI":
+      # get all b-values used
       print desc
-      dicomFiles = glob.glob(os.path.join(studyDir,s,'DICOM')+'/*dcm')
-      try:
-        dcm = dicom.read_file(dicomFiles[0])
-      except:
-        print 'Failed to read',studyDir+'/'+s+'/DICOM'
-      model = dcm.ManufacturerModelName
-      manufacturer = dcm.Manufacturer
+      print studyDir,s
+      bvals = getDWIbValue(studyDir,s)
+      attrs['b-values'] = bvals
+    if seriesType == "ADC": # try to figure out the b-values
+      #print desc
       try:
         sl = dcm[0x0043,0x1039]
         if sl.VR == 'UN':
@@ -133,20 +150,23 @@ for c in studies:
       except:
         sl = getDWIbValue(studyDir,s)
         bValue = sl[0]
+      #print bValue
       seriesType = seriesType+str(bValue)
       #print seriesType
 
     seriesDescription2Type[desc] = seriesType
-    attrs = {'CanonicalType':seriesType,'Manufacturer':manufacturer,
-        'ManufacturerModelName':model}
+    attrs['CanonicalType'] = seriesType
+    attrs['Manufacturer'] = manufacturer
+    attrs['ManufacturerModelName'] = model
     f.write(json.dumps(attrs))
     f.close
 
   #print 'Total series for study ',c,':',seriesPerStudy
 
 #print "Total series: ",totalSeries,' map size: ',len(seriesDescription2Count)
-#print seriesDescription2Count
+#for k in seriesDescription2Count.keys():
+#  print k,seriesDescription2Count[k]
 
-for k in seriesDescription2Type.keys():
-  if seriesDescription2Type[k].startswith('ADC'):
-    print k,' ==> ',seriesDescription2Type[k]
+#for k in seriesDescription2Type.keys():
+#  if seriesDescription2Type[k].startswith('ADC'):
+#    print k,' ==> ',seriesDescription2Type[k]

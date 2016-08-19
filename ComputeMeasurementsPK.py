@@ -4,6 +4,8 @@ import mpReviewUtil
 
 import SimpleITK as sitk
 
+RSQR_MIN = 0.0
+
 
 def threshold(image,low,high):
   thresh = sitk.BinaryThresholdImageFilter()
@@ -147,7 +149,6 @@ for c in studies:
 
         canonicalType = getCanonicalType(data,c,s)
 
-        print canonicalType
         if canonicalType != 'SUB':
           continue
 
@@ -155,12 +156,11 @@ for c in studies:
         segmentationFile = segFiles[-1]
 
         oqseries = glob.glob(pkdata+'/'+c+'/RESOURCES/*')[0].split('/')[3]
-        #print oqseries
         maps = glob.glob(pkdata+'/'+c+'/RESOURCES/'+oqseries+'/OncoQuant/*nrrd')
 
         map2mask = {}
         map2validVoxels = {}
-        print segmentationFile
+        #print segmentationFile
         segImage = sitk.ReadImage(str(segmentationFile)) > 0
         segStats = sitk.LabelStatisticsImageFilter()
         segStats.Execute(segImage,segImage)
@@ -180,10 +180,14 @@ for c in studies:
             rsqrImage.SetDirection(veImage.GetDirection())
             segImage.SetDirection(veImage.GetDirection())
 
-            veThreshImage = threshold(veImage,0.001,1) & threshold(rsqrImage,0.75,100) & threshold(segImage,1,100)
+            veThreshImage = threshold(veImage,0.001,1) & threshold(rsqrImage,RSQR_MIN,100) & threshold(segImage,1,100)
+            veThreshImage = threshold(veImage,0.001,1) & threshold(segImage,1,100)
             segStats.Execute(veThreshImage,veThreshImage)
             veCnt = segStats.GetCount(1)
-            map2validVoxels[m] = veCnt/segCnt
+            if segCnt != 0:
+              map2validVoxels[m] = float(veCnt)/float(segCnt)
+            else:
+              map2validVoxels[m] = 'NA'
             '''
             if veCnt != segCnt:
               print 've mismatch!'
@@ -191,7 +195,7 @@ for c in studies:
               sys.exit()
             '''
             veThreshFileName = segmentationFile[:-5]+'-'+os.path.split(m)[1][:-5]+'.nrrd'
-            print 'Would save PK mask to',veThreshFileName
+            #print 'Would save PK mask to',veThreshFileName
             sitk.WriteImage(veThreshImage,str(veThreshFileName))
             map2mask[m] = veThreshFileName
           if m.find('Ktrans')>0:
@@ -203,10 +207,14 @@ for c in studies:
             rsqrImage.SetDirection(ktransImage.GetDirection())
             segImage.SetDirection(ktransImage.GetDirection())
 
-            ktransThreshImage = threshold(ktransImage,0.001,5) & threshold(rsqrImage,0.75,100) & threshold(segImage,1,100)
+            ktransThreshImage = threshold(ktransImage,0.001,5) & threshold(rsqrImage,RSQR_MIN,100) & threshold(segImage,1,100)
+            ktransThreshImage = threshold(ktransImage,0.001,5) & threshold(segImage,1,100)
             segStats.Execute(ktransThreshImage,ktransThreshImage)
             ktransCnt = segStats.GetCount(1)
-            map2validVoxels[m] = ktransCnt/segCnt
+            if segCnt != 0:
+              map2validVoxels[m] = float(ktransCnt)/float(segCnt)
+            else:
+              map2validVoxels[m] = 'NA'
             '''
             if ktransCnt != segCnt:
               print 'Ktrans mismatch!'
@@ -214,7 +222,7 @@ for c in studies:
               sys.exit()
             '''
             ktransThreshFileName = segmentationFile[:-5]+'-'+os.path.split(m)[1][:-5]+'.nrrd'
-            print 'Would save PK mask to',ktransThreshFileName
+            #print 'Would save PK mask to',ktransThreshFileName
             sitk.WriteImage(ktransThreshImage,str(ktransThreshFileName))
             map2mask[m] = ktransThreshFileName
 
@@ -233,13 +241,27 @@ for c in studies:
             measurements['ValidVoxelsPercentage'] = map2validVoxels[m]
             pkMasksDir = os.path.split(map2mask[imageFile])[0]+'/PKmasks'
             if len(os.path.split(map2mask[imageFile])[1].split('-'))>3:
-              print map2mask[imageFile]
-              print pkMasksDir
+              #print map2mask[imageFile]
+              #print pkMasksDir
               try:
                 os.mkdir(pkMasksDir)
               except:
                 pass
-              shutil.move(map2mask[imageFile],pkMasksDir)
+              try:
+                shutil.move(map2mask[imageFile],pkMasksDir)
+              except:
+                os.remove(pkMasksDir+'/'+os.path.split(map2mask[imageFile])[1])
+                shutil.move(map2mask[imageFile],pkMasksDir)
+
+            patientID = c.split('_')[0]
+            date = c.split('_')[1]
+
+            mAttrs = m.split('/')[-1].split('-')
+            reportRow = [patientID,date,mAttrs[1],mAttrs[3].split('.')[0],structure]
+            rowBase = ';'.join(reportRow)
+            for mk,mv, in measurements.iteritems():
+              if mk != 'SegmentationName':
+                print rowBase+';'+str(mk)+';'+str(mv)
 
             '''
             try:
@@ -248,9 +270,10 @@ for c in studies:
               pass
             '''
 
+
             # get rid of .nrrd
             measurementsFile = os.path.split(imageFile)[1][:-5]
-            measurementsFile = measurementsFile+'-'+structure+'-'+reader+'.nrrd'
+            measurementsFile = measurementsFile+'-'+structure+'-'+reader+'.json'
 
             measurementsPath = os.path.join(measurementsDir,measurementsFile)
             #print 'Saving'

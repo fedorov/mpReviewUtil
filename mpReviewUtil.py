@@ -63,5 +63,13 @@ def computeMeasurements(imageFile,segmentationFile,measurementTypes,resampleLabe
       pixels.sort()
       percent = float(mtype[10:])/100.
       measurements[mtype] = float(pixels[len(pixels)*percent])
-
+    if mtype == "PixelValues":
+      import numpy
+      npImage = sitk.GetArrayFromImage(image)
+      npLabel = sitk.GetArrayFromImage(label)
+      nz = numpy.where(npLabel!=0)
+      result = ""
+      for p in range(nz[0].size):
+        result = result+'('+ str(nz[0][p])+','+str(nz[1][p])+','+str(nz[2][p])+'):'+str(npImage[nz[0][p],nz[1][p],nz[2][p]])+','
+      measurements[mtype] = result
   return measurements

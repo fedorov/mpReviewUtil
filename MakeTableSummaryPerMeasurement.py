@@ -45,17 +45,29 @@ for dir,subdirs,files in os.walk(sys.argv[1]):
     canonicalType = getCanonicalName(dir)
 
     for f in files:
+      isPkMap = False
+
+      # skip those NRRDs saved by mistake!
+      if not f.endswith('json'):
+        continue
       mmsFile = os.path.join(dir,f)
       expectedSeriesNumber = f.split('-')[0]
       if expectedSeriesNumber != seriesNumber:
         # this is a PK map
+        isPkMap = True
         nameSplit = f.split('-')
-        canonicalType = nameSplit[3]+'.'+nameSplit[1]
+        pkMapType = nameSplit[3]+'.'+nameSplit[1]
 
-      mms = json.loads(open(mmsFile,'rb').read())
+      try:
+        mms = json.loads(open(mmsFile,'rb').read())
+      except:
+        continue
       try:
         items = mms['SegmentationName'].split('.')[0].split('-')
+        if len(items)<3:
+          continue
       except:
+        #print dir,f,dcmMetaItems,'messed up, continue'
         continue
       reader = items[0]
       structure = items[1]
@@ -64,8 +76,15 @@ for dir,subdirs,files in os.walk(sys.argv[1]):
       for k,v in mms.iteritems():
         if k == 'SegmentationName':
           continue
+        dcmMetaItemsStr = ''
         for m in dcmMetaItems:
-          print m,';',
+          dcmMetaItemsStr = dcmMetaItemsStr+str(m)+';'
 
-        print k,';',v,';',reader,';',structure,';',readDate,';',canonicalType,';',
-        print
+        dcmMetaItemsStr = dcmMetaItemsStr[:-1]
+
+
+        if isPkMap:
+          print ';'.join((dcmMetaItemsStr,str(k),str(v),str(reader),str(structure),str(readDate),str(pkMapType)))
+        else:
+          print ';'.join((dcmMetaItemsStr,str(k),str(v),str(reader),str(structure),str(readDate),str(canonicalType)))
+        #print

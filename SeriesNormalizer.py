@@ -21,22 +21,24 @@ def getDWIbValue(studyDir,seriesStr):
     except:
       continue
     try:
-      sl = dcm[0x0043,0x1039]
-      value = dcm[0x0043,0x1039].value.decode('ascii')
-      vr = dcm[0x0043,0x1039].VR
-      if vr == 'UN':
-        bValue = int(value.split('\\')[0])
+      if dcm.Manufacturer == "SIEMENS":
+        bValue = int(dcm[0x0019,0x100c].value)
       else:
-        bValue = sl[0]
-    except e:
-      print('No clue what to do')
+        sl = dcm[0x0043,0x1039]
+        value = dcm[0x0043,0x1039].value.decode('ascii')
+        vr = dcm[0x0043,0x1039].VR
+        if vr == 'UN':
+          bValue = int(value.split('\\')[0])
+        else:
+          bValue = sl[0]
+    except Exception as e:
+      print("ERROR processing "+d)
       print(e)
     if int(bValue)>100000:
       bValue = bValue % 100000
     bVals.add(bValue)
   bVals = [i for i in bVals]
   bVals.sort(reverse=True)
-  print(str(bVals))
   return bVals
 
 def getElementValue(dom,name):
@@ -69,7 +71,7 @@ def getCanonicalType(dom):
     return "SUB"
   elif (re.search('AX ',desc) and re.search('T2 ',desc)) or (desc == 'AX FRFSE-XL T2'):
     return "T2AX"
-  elif desc.startswith('Apparent Diffusion Coefficient'):
+  elif desc.startswith('Apparent Diffusion Coefficient') or desc.endswith('ADC'):
     # TODO: parse platform-specific b-values etc
     return 'ADC'
   elif re.search('Ax Dynamic',desc) or re.search('3D DCE',desc):
@@ -88,6 +90,8 @@ totalSeries = 0
 totalStudies = 0
 
 for c in studies:
+  print(c)
+
   studyDir = os.path.join(data,c,'RESOURCES')
 
   try:
@@ -100,14 +104,11 @@ for c in studies:
 
   # process in numeric order, so that we parse DWI before ADC, and take b-value
   # from there
-  print(str(series))
   seriesNumeric = [int(s) for s in series if str.isdigit(s)]
   seriesNumeric.sort()
   series = [str(s) for s in seriesNumeric]
-  print(str(series))
 
   for s in series:
-    print("Processing series "+s)
     canonicalPath = os.path.join(studyDir,s,'Canonical')
     try:
       os.mkdir(canonicalPath)
@@ -123,7 +124,6 @@ for c in studies:
 
     desc = getElementValue(dom, 'SeriesDescription')
     seriesType = getCanonicalType(dom)
-    print("This is "+seriesType)
     totalSeries = totalSeries+1
     seriesPerStudy = seriesPerStudy+1
 
@@ -153,26 +153,27 @@ for c in studies:
 
     if seriesType == "DWI":
       # get all b-values used
-      print(desc)
-      print(studyDir+s)
       bvals = getDWIbValue(studyDir,s)
-      print(str(bvals))
       attrs['b-values'] = bvals
     if seriesType == "ADC": # try to figure out the b-values
-      dwiSeries = str(int(int(s) / 100))
-      dwiCanonicalPath = os.path.join(studyDir,dwiSeries,'Canonical',dwiSeries+".json")
-      print(dwiCanonicalPath)
-      with open(dwiCanonicalPath,'r') as dwiFile:
-        dwiJson = json.load(dwiFile)
-        attrs["b-values"] = dwiJson["b-values"]
-        seriesType = seriesType+str(dwiJson["b-values"][0])
-        print(seriesType)
+      bValues = getDWIbValue(studyDir, s)
+      if len(bValues) == 0:
+        # try to get them from the DWI series
+        dwiSeries = str(int(int(s) / 100))
+        dwiCanonicalPath = os.path.join(studyDir,dwiSeries,'Canonical',dwiSeries+".json")
+        with open(dwiCanonicalPath,'r') as dwiFile:
+          dwiJson = json.load(dwiFile)
+          bValues = dwiJson["b-values"]
+
+      attrs["b-values"] = bValues
+      seriesType = seriesType+str(dwiJson["b-values"][0])
 
     seriesDescription2Type[desc] = seriesType
     attrs['CanonicalType'] = seriesType
     attrs['Manufacturer'] = manufacturer
     attrs['ManufacturerModelName'] = model
-    print(seriesType)
+    if seriesType != "Unknown":
+      print("    "+s+" is "+seriesType)
     f.write(json.dumps(attrs))
     f.close
 

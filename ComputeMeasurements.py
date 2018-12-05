@@ -47,7 +47,7 @@ def getValidDirs(dir):
 def getCanonicalType(rootDir,study,series):
   canonicalPath = os.path.join(rootDir,study,'RESOURCES',series,'Canonical')
   canonicalFile = os.path.join(canonicalPath,s+'.json')
-  print canonicalFile
+  print(canonicalFile)
   try:
     seriesAttributes = json.loads(open(canonicalFile,'r').read())
     return seriesAttributes['CanonicalType']
@@ -97,12 +97,14 @@ for c in studies:
     try:
       seriesAttributes = json.loads(open(canonicalFile,'r').read())
     except:
+      print("Failed to load canonical json")
       continue
 
     # check if the series type is of interest
     if not seriesAttributes['CanonicalType'] in settings['SeriesTypes']:
       continue
 
+    print("Processing "+seriesAttributes['CanonicalType'])
     # if no structures specified in the config file, consider all
     allStructures = None
     try:
@@ -115,19 +117,21 @@ for c in studies:
           'NormalROI_CGTZ_1']
 
     for structure in allStructures:
-
+      print("Processing "+structure)
       # check if segmentation is available for this series
       segmentationsPath = os.path.join(studyDir,s,'Segmentations')
 
       for reader in settings['Readers']:
-        segFiles = glob.glob(segmentationsPath+'/'+reader+'-'+structure+'*')
+        globPattern = segmentationsPath+'/'+reader+'-'+structure+'*'
+        segFiles = glob.glob(globPattern)
 
         if not len(segFiles):
+          print("ERROR: Failed to find segmentations that match "+globPattern)
           continue
         segFiles.sort()
 
         canonicalType = getCanonicalType(data,c,s)
-        print 'Canonical type:',canonicalType,seriesAttributes['CanonicalType']
+        print('Canonical type:'+seriesAttributes['CanonicalType'])
 
         # consider only the most recent seg file for the given reader
         segmentationFile = segFiles[-1]
@@ -147,7 +151,7 @@ for c in studies:
             os.mkdir(measurementsDir)
         measurementsFile = os.path.join(measurementsDir,s+'-'+structure+'-'+reader+'.json')
         f = open(measurementsFile,'w')
-        print measurements
+        print(str(measurements))
         f.write(json.dumps(measurements))
         f.close()
 
@@ -157,4 +161,4 @@ for c in studies:
 
         #print str(measurements)
 
-print 'WARNING: ADD RESAMPLING OF THE LABEL TO IMAGE!!!'
+print('WARNING: ADD RESAMPLING OF THE LABEL TO IMAGE!!!')

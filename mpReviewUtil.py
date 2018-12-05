@@ -15,15 +15,15 @@ def computeMeasurements(imageFile,segmentationFile,measurementTypes,resampleLabe
   image.SetOrigin(label.GetOrigin())
 
   if image.GetSize()[2] != label.GetSize()[2]:
-    print 'ERROR: Image/label sizes do not match!'
+    print('ERROR: Image/label sizes do not match!')
     abort()
 
   stats = sitk.LabelStatisticsImageFilter()
   stats.Execute(label,label)
   totalLabels = stats.GetNumberOfLabels()
   if totalLabels<2:
-    print segmentationFile
-    print "ERROR: Segmentation should have exactly 2 labels!"
+    print(segmentationFile)
+    print("ERROR: Segmentation should have exactly 2 labels!")
     return {}
 
   # threshold to label 1
@@ -62,7 +62,7 @@ def computeMeasurements(imageFile,segmentationFile,measurementTypes,resampleLabe
       pixels = npImage[npLabel==1]
       pixels.sort()
       percent = float(mtype[10:])/100.
-      measurements[mtype] = float(pixels[len(pixels)*percent])
+      measurements[mtype] = float(pixels[int(len(pixels)*percent)])
     if mtype == "PixelValues":
       import numpy
       npImage = sitk.GetArrayFromImage(image)

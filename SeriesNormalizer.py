@@ -1,4 +1,4 @@
-import shutil, string, os, sys, glob, xml.dom.minidom, dicom
+import shutil, string, os, sys, glob, xml.dom.minidom, pydicom
 
 # Iterate over all series in the directory that follows PCampReview convention,
 # use rules defined in getCanonicalType() to 'tag' series according to the
@@ -16,20 +16,27 @@ def getDWIbValue(studyDir,seriesStr):
     dwiFiles = glob.glob(studyDir+'/'+seriesStr+'/DICOM/*dcm')
   bVals = set()
   for d in dwiFiles:
-    dcm = dicom.read_file(d)
+    try:
+      dcm = pydicom.read_file(d)
+    except:
+      continue
     try:
       sl = dcm[0x0043,0x1039]
-      if sl.VR == 'UN':
-        bValue = sl.value.split('\\')[0]
+      value = dcm[0x0043,0x1039].value.decode('ascii')
+      vr = dcm[0x0043,0x1039].VR
+      if vr == 'UN':
+        bValue = int(value.split('\\')[0])
       else:
         bValue = sl[0]
-    except:
-      print 'No clue what to do'
-    if bValue>100000:
+    except e:
+      print('No clue what to do')
+      print(e)
+    if int(bValue)>100000:
       bValue = bValue % 100000
     bVals.add(bValue)
   bVals = [i for i in bVals]
   bVals.sort(reverse=True)
+  print(str(bVals))
   return bVals
 
 def getElementValue(dom,name):
@@ -91,7 +98,16 @@ for c in studies:
   totalStudies = totalStudies+1
   seriesPerStudy = 0
 
+  # process in numeric order, so that we parse DWI before ADC, and take b-value
+  # from there
+  print(str(series))
+  seriesNumeric = [int(s) for s in series if str.isdigit(s)]
+  seriesNumeric.sort()
+  series = [str(s) for s in seriesNumeric]
+  print(str(series))
+
   for s in series:
+    print("Processing series "+s)
     canonicalPath = os.path.join(studyDir,s,'Canonical')
     try:
       os.mkdir(canonicalPath)
@@ -107,6 +123,7 @@ for c in studies:
 
     desc = getElementValue(dom, 'SeriesDescription')
     seriesType = getCanonicalType(dom)
+    print("This is "+seriesType)
     totalSeries = totalSeries+1
     seriesPerStudy = seriesPerStudy+1
 
@@ -122,42 +139,40 @@ for c in studies:
     model = ''
     import json
     attrs = {}
-      
+
     dicomFiles = glob.glob(os.path.join(studyDir,s,'DICOM')+'/*dcm')
-    
+
     try:
-      dcm = dicom.read_file(dicomFiles[0])
+      dcm = pydicom.read_file(dicomFiles[0])
     except:
-      print 'Failed to read',studyDir+'/'+s+'/DICOM'
+      print('Failed to read'+dicomFiles[0])
+      continue
 
     model = dcm.ManufacturerModelName
     manufacturer = dcm.Manufacturer
 
     if seriesType == "DWI":
       # get all b-values used
-      print desc
-      print studyDir,s
+      print(desc)
+      print(studyDir+s)
       bvals = getDWIbValue(studyDir,s)
+      print(str(bvals))
       attrs['b-values'] = bvals
     if seriesType == "ADC": # try to figure out the b-values
-      #print desc
-      try:
-        sl = dcm[0x0043,0x1039]
-        if sl.VR == 'UN':
-          bValue = sl.value.split('\\')[0]
-        else:
-          bValue = sl[0]
-      except:
-        sl = getDWIbValue(studyDir,s)
-        bValue = sl[0]
-      #print bValue
-      seriesType = seriesType+str(bValue)
-      #print seriesType
+      dwiSeries = str(int(int(s) / 100))
+      dwiCanonicalPath = os.path.join(studyDir,dwiSeries,'Canonical',dwiSeries+".json")
+      print(dwiCanonicalPath)
+      with open(dwiCanonicalPath,'r') as dwiFile:
+        dwiJson = json.load(dwiFile)
+        attrs["b-values"] = dwiJson["b-values"]
+        seriesType = seriesType+str(dwiJson["b-values"][0])
+        print(seriesType)
 
     seriesDescription2Type[desc] = seriesType
     attrs['CanonicalType'] = seriesType
     attrs['Manufacturer'] = manufacturer
     attrs['ManufacturerModelName'] = model
+    print(seriesType)
     f.write(json.dumps(attrs))
     f.close
 

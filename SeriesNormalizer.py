@@ -166,7 +166,7 @@ for c in studies:
           bValues = dwiJson["b-values"]
 
       attrs["b-values"] = bValues
-      seriesType = seriesType+str(dwiJson["b-values"][0])
+      seriesType = seriesType+str(attrs["b-values"][0])
 
     seriesDescription2Type[desc] = seriesType
     attrs['CanonicalType'] = seriesType

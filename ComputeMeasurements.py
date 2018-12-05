@@ -144,11 +144,14 @@ for c in studies:
         try:
           os.mkdir(measurementsDir)
         except:
+          pass
+          '''
           import shutil
           oldDir = os.path.join(studyDir,s,'Measurements-old')
           if not os.path.exists(oldDir):
             shutil.move(measurementsDir, oldDir)
             os.mkdir(measurementsDir)
+          '''
         measurementsFile = os.path.join(measurementsDir,s+'-'+structure+'-'+reader+'.json')
         f = open(measurementsFile,'w')
         print(str(measurements))

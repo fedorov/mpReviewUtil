@@ -129,8 +129,11 @@ for c in studies:
     try:
       allStructures = settings['Structures']
     except:
-      allStructures = ['WholeGland','PeripheralZone','TumorROI_PZ_1',
+      allStructures = ['WholeGland','PeripheralZone',
+          'TumorROI_PZ_1',
           'TumorROI_CGTZ_1',
+          'TumorROI_PZ_2',
+          'TumorROI_CGTZ_2',
           'BPHROI_1',
           'NormalROI_PZ_1',
           'NormalROI_CGTZ_1']
